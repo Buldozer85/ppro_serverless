@@ -1,0 +1,20 @@
+version: "3.9"
+
+services:
+  localstack:
+    container_name: localstack
+    image: localstack/localstack:stable
+    ports:
+      - "4566:4566"     # hlavní endpoint
+      - "4571:4571"
+    environment:
+      - SERVICES=lambda,apigateway,dynamodb,cloudwatch,logs,s3
+      - DEBUG=1
+      - LAMBDA_EXECUTOR=docker
+      - AWS_DEFAULT_REGION=eu-central-1
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - LOCALSTACK_API_KEY=${LOCALSTACK_API_KEY-}   # prázdné = Free version
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"
+      - "./localstack_data:/var/lib/localstack"
+      - "./lambda/build/libs:/opt/lambda"        # sem můžeš ukládat JAR balíčky pro Lambdy

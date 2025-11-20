@@ -44,6 +44,4 @@ bin/
 ### Mac OS ###
 .DS_Store
 
-.idea
-
 localstack_data

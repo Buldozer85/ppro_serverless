@@ -1,19 +1,24 @@
 plugins {
-    kotlin("jvm") version "2.2.20"
+    kotlin("jvm") version "1.9.20"
 }
-
-group = "org.example"
-version = "1.0-SNAPSHOT"
 
 repositories {
     mavenCentral()
 }
 
 dependencies {
-    implementation("com.amazonaws:aws-lambda-java-core:1.2.3")
-    implementation("com.amazonaws:aws-lambda-java-events:3.11.0")
+    implementation("com.amazonaws:aws-lambda-java-core:1.2.1")
 }
 
-tasks.test {
-    useJUnitPlatform()
+tasks.jar {
+    manifest {
+        attributes["Main-Class"] = "example.Handler"
+    }
+    from(configurations.runtimeClasspath.get().map { if (it.isDirectory) it else zipTree(it) })
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+}
+
+kotlin {
+    // 🔥 DŮLEŽITÉ — vynutí kompilaci na Java 17, kompatibilní s Lambda runtime
+    jvmToolchain(17)
 }

@@ -8,8 +8,8 @@ Tento workshop Vás provede základy serveless vývoje s využitím dockerizovan
 
 - Vytvořit a nahrát serveless funkci
 - Napojení na API Gateway
-- Ukládání dat do DynamoDB
 - Základy AWS CLI
+- Volitelně ukládání dat do DynamoDB
 
 ## Technologie
 
@@ -81,10 +81,9 @@ prpo_serverless/
 │   │   └── libs/
 │   │       └── funkce.jar 
 │   ├── build.gradle.kts
+    ├── settings.gradle.kts
 ├── localstack_data/
 ├── docker-compose.yml
-├── build.gradle.kts
-├── settings.gradle.kts
 └── README.md
 ```
 
@@ -352,3 +351,93 @@ Pro testování přes postman je třeba mít nainstalovaný a spuštěný Postma
   -H "Content-Type: application/json" \
   -d '{"name":"Pavel"}'
 ```
+
+### Bonusový úkol, práce s DynamoDB (volitelně)
+#### Vytvoření tabulky
+```bash
+aws dynamodb create-table \
+  --table-name names \
+  --attribute-definitions AttributeName=id,AttributeType=S \
+  --key-schema AttributeName=id,KeyType=HASH \
+  --billing-mode PAY_PER_REQUEST \
+  --region eu-central-1 \
+  --endpoint-url http://localhost:4566
+```
+
+#### Ověření existence tabulky
+```bash
+aws dynamodb list-tables \
+  --endpoint-url http://localhost:4566 \
+  --region eu-central-1
+
+```
+
+#### Vložení dat do tabulky ručně
+```bash
+aws dynamodb put-item \
+  --table-name names \
+  --item '{
+        "id": {"S": "1"},
+        "name": {"S": "Pavel"}
+    }' \
+  --region eu-central-1 \
+  --endpoint-url http://localhost:4566
+```
+
+#### Získání jednoho záznamu
+```bash
+aws dynamodb get-item \
+--table-name names \
+--key '{"id": {"S": "1"}}' \
+--region eu-central-1 \
+--endpoint-url http://localhost:4566 \
+--output json
+```
+
+#### Načtení všech záznamů
+```bash
+aws dynamodb scan \
+--table-name names \
+--region eu-central-1 \
+--endpoint-url http://localhost:4566 \
+--output json
+```
+
+#### Více informací a propojení s AWS Lambda
+https://docs.aws.amazon.com/lambda/latest/dg/welcome.html
+
+## Shrnutí
+V tomto workshopu jste si vyzkoušeli:
+
+- psaní Kotlin Lambda funkcí
+
+- kompilaci a balení pomocí Gradlu
+
+- nasazení a testování funkcí přes AWS CLI
+
+- práci s LocalStackem jako plnohodnotným lokálním AWS cloudem
+
+- propojení Lambda → API Gateway
+
+- (volitelně) práci s DynamoDB
+
+Tento základní serverless stack tvoří stavební kámen moderních cloud-native aplikací. Kombinace AWS Lambda a API Gateway vám umožní vytvářet škálovatelné, úsporné a snadno spravovatelné mikroslužby.
+
+## Časté chyby
+### Lambda zůstává ve stavu Pending
+```bash
+docker compose down
+rm -rf localstack_data
+docker compose up -d
+```
+### Function already exist
+```bash
+aws lambda delete-function \
+--function-name <FUNCTION_NAME> \
+--endpoint-url http://localhost:4566
+#znovu vytvořit funkci
+```
+
+### Při buildu nevzniká JAR nebo je prázdný
+
+

@@ -4,6 +4,75 @@ Workshop demonstrující serverless architekturu s využitím AWS CLI a LocalSta
 
 Tento workshop Vás provede základy serveless vývoje s využitím dockerizované služby LocalStack, která je vhodná pro bezplatné testování běhěm vývoje. Pro komunikaci bude sloužit AWS CLI.
 
+## Teoretický přehled
+Serverless je způsob vývoje a provozu aplikací, kdy vývojář nemusí spravovat servery.
+Nemusí se řešit:
+- infrastruktura
+- provisioning
+- škálování
+- aktualizace OS 
+- kapacity
+
+To vše dělá cloud provider (AWS, Azure, GCP).
+
+Vy jen nahrajete funkci nebo službu — a cloud ji spustí, když je potřeba.
+
+### Jak serverless funguje?
+
+1. Napíše se malý kus kódu (např. funkce v Kotlinu).
+2. Nasadí se do cloudu (AWS Lambda).
+3. Kód se spouští na vyžádání, např.:
+    - HTTP požadavek (API Gateway)
+    - změna v databázi (DynamoDB Stream)
+    - cron job (EventBridge)
+    - nahrání souboru (S3)
+4. Pokud není žádný provoz → funkce neběží → neplatí se nic.
+
+### Klíčové služby v serverless architektuře
+1) AWS Lambda (core)
+    - Spouští funkce napsané v Kotlinu, Java, Python, Nodeu… 
+    - Běží jen při requestu. 
+    - Účtování za počet volání + dobu běhu.
+2) API Gateway
+   - Spravuje HTTP API. 
+   - Route → Lambda. 
+   - Autorizace, throttling, transformace JSON.
+3) DynamoDB
+   - Serverless NoSQL databáze. 
+   - Škáluje automaticky. 
+   - Platí se jen za skutečné R/W operace.
+4) EventBridge
+   - Cron, eventová komunikace, event-driven architektura.
+5) S3
+   - Triggery na nahrání souborů. 
+   - Hostování statických webů.
+
+### Výhody 
+
+- Bez nutnosti spravovat infrastrukturu
+- Platí se pouze za provoz
+- Automatické škálování
+- Rychlý vývoj
+- Mikroservisní architektura
+
+### Na co je vhodná serveless
+
+- Api endpointy, cron joby, webhooky, light backend služby, datové zpracování ETL operace
+
+### Na co se nehodí
+
+- Dlouhé výpočty, nízko-latenční realtime služby, aplikace, které vyžadují persistentní procesy, masivní batch processing (pak raději ECS/EKS)
+
+### Nevýhody serverless
+❌ Cold start - První spuštění po delší pauze je pomalejší (Java/Kotlin více než Node/Python).
+
+❌ Omezené runtime prostředí
+- Čas běhu max. 15 minut
+- Omezený filesystem
+- Komunikace v rámci VPC musí být správně nastavena
+
+❌ Vendor lock-in - Počítá se s AWS ekosystémem.
+
 ## Co se naučíte?
 
 - Vytvořit a nahrát serveless funkci
@@ -22,7 +91,7 @@ Tento workshop Vás provede základy serveless vývoje s využitím dockerizovan
 
 ## Požadavky
 - Na windows WSL
-- JDK 11+
+- JDK 17
 - Docker Desktop
 - AWS CLI v2
 - Gradle 8+ (nebo použij wrapper `./gradlew`)
@@ -132,6 +201,12 @@ aws lambda invoke --function-name nazev_funkce --payload # Zavolání funkce a p
 ## Krok za krokem
 
 ### Úkol 1: Vytvořte v souboru Handle funkci a nahrajte ji na LocalStack.  
+Potřeba této závislosti (již doplněná v build.gradle.kts):
+
+```kotlin
+implementation("com.amazonaws:aws-lambda-java-core:1.2.1")
+```
+
 Doplňte funkci handleRequest v jazyku Kotlin tak, že:
 
 1. přijme JSON objekt { "name": "Alice" }
@@ -144,13 +219,12 @@ Pro nahrání využijte AWS CLI se skriptem v složce infra
 #### Řešení
 ##### Krok 1 Handler.kt
 ```Kotlin
-class Handler : RequestHandler<Map<String, String>, String> {
-    override fun handleRequest(input: Map<String, String>, context: Context): String {
+class Handler : RequestHandler<Map<String, String>, Map<String, String>> {
+    override fun handleRequest(input: Map<String, String>, context: Context): Map<String, String> {
         val name = input["name"] ?: "Unknown"
-        return "Hello, $name! (LocalStack Kotlin Lambda)"
+        return mapOf("message" to "Hello, $name!")
     }
 }
-
 ```
 ##### Krok 2 Build
 
@@ -164,16 +238,16 @@ class Handler : RequestHandler<Map<String, String>, String> {
   cd ..
   ./infra/deploy.sh # Lze předat název funkce
   # Pro ukončení výpisu stačí zmáčknout klávesu q
+  
   #alternativně
   aws lambda create-function \
-  --function-name <FUNCTION_NAME> #název funkce 
+  --function-name <FUNCTION_NAME> \
   --runtime java17 \
-  --handler example.Handler #třída s metodou handleRequest 
-  --zip-file fileb://<JAR> #zkompilovaný jar soubor
-  --role arn:aws:iam::000000000000:role/lambda-role #role 
+  --handler example.Handler \ 
+  --zip-file fileb://<JAR> \
+  --role arn:aws:iam::000000000000:role/lambda-role \
   --region "eu-central-1" \
-  --endpoint-url "http://localhost:4566" \
-  
+  --endpoint-url "http://localhost:4566" 
 ```
 
 ##### Test, že se vytvořila funkce 
@@ -216,17 +290,20 @@ aws apigateway create-deployment         # Nasadí API konfiguraci na zvolenou s
 
 #### Krok za krokem
 
-Vše je zautomatizováno ve sciptu /infra/api/deploy_api.sh'
+Vše je zautomatizováno ve sciptu ./infra/api/deploy_api.sh'
+```bash
+  ./infra/api/deploy_api.sh
+```
 
 ##### Krok 1 Vytvoření API
 Důležité si uchovat ID API pro další kroky. Alternativně lze vypsat znovu příkazem.
 ```bash
-#Vytvoření API s názvem LocalHelloAPI
-API_ID=$(aws apigateway create-rest-api \
+#Vytvoření API s názvem LocalHelloAPI, vrátí API ID
+aws apigateway create-rest-api \
   --name "LocalHelloAPI" \
   --region "eu-central-1" \
   --endpoint-url "http://localhost:4566" \
-  --query 'id' --output text)
+  --query 'id' --output text
 ```
 Vypsání informací o všech vytvořených API
 ```bash
@@ -238,25 +315,27 @@ aws apigateway get-rest-apis \
 ##### Krok 2 Získání Root resource ID
 - Root resource reprezentuje adresář "/"
 - V rámci API je stromová hierarchie, kde nastavení parenta znamená přiřazení pod daný resource. Například resource /home je přiřažený pod root resource, kdežto resource /home/about má parent_id již resource /home místo root resource a je pod tento /home taktéž přiřazen.
+- Vrátí root ID
 ```bash
-ROOT_ID=$(aws apigateway get-resources \
+aws apigateway get-resources \
 --rest-api-id <API_ID> \
 --region "eu-central-1" \
 --endpoint-url "http://localhost:4566" \
---query 'items[0].id' --output text)
+--query 'items[0].id' --output text
 ```
 
 ##### Krok 3 Vytvoření nového resource
 Vytvoříme si resource /hello. Během vytváření specifikujeme parent_id jako root resource ID a api ID, aby bylo jasné, ve které API se to má vytvořit.
 Získáme ID resource, které je důležité pro další kroky.
+Vrátí ID resource (HELLO_ID).
 ```bash
-HELLO_ID=$(aws apigateway create-resource \
+aws apigateway create-resource \
   --rest-api-id <API_ID> \
   --parent-id <ROOT_ID> \
   --path-part hello \
   --region "eu-central-1" \
   --endpoint-url "http://localhost:4566" \
-  --query 'id' --output text)
+  --query 'id' --output text
 ```
 ##### Krok 4 Přiřazení POST HTTP metody resource
 Tímto krokem nabindujeme resource /hello na metodu POST.
@@ -279,7 +358,8 @@ aws apigateway put-integration \
   --type AWS \
   --integration-http-method POST \
   --uri "arn:aws:apigateway:eu-central-1:lambda:path/2015-03-31/functions/arn:aws:lambda:eu-central-1:000000000000:function:<FUNCTION_NAME>/invocations" \
-  --request-templates '{"application/json":"$input.body"}' # Specifikace co má přijímat Lambda funkce
+  # Specifikace co má přijímat Lambda funkce
+  --request-templates '{"application/json":"$input.body"}' \ 
   --region "eu-central-1" \
   --endpoint-url "http://localhost:4566"
 ```
@@ -439,5 +519,10 @@ aws lambda delete-function \
 ```
 
 ### Při buildu nevzniká JAR nebo je prázdný
+
+### Nelze spustit připravený script
+```bash
+chmod +x
+```
 
 
